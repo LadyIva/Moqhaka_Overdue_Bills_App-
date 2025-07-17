@@ -51,7 +51,7 @@ st.sidebar.info("This is a prototype. Data used is illustrative. For full functi
 
 # --- Actual Data Loading and Prediction ---
 @st.cache_data # Caches data loading/processing to avoid re-running on every interaction
-def load_and_predict_data(scaler_obj, model_obj):
+def load_and_predict_data(_scaler_obj, _model_obj):
     """
     Loads actual data from a CSV, scales numerical features, and generates predictions.
     """
@@ -225,14 +225,14 @@ def load_and_predict_data(scaler_obj, model_obj):
     # Scale numerical features using the loaded scaler
     X_data_scaled = X_data.copy()
     try:
-        X_data_scaled[NUMERICAL_COLS_FOR_SCALING] = scaler_obj.transform(X_data[NUMERICAL_COLS_FOR_SCALING])
+        X_data_scaled[NUMERICAL_COLS_FOR_SCALING] = _scaler_obj.transform(X_data[NUMERICAL_COLS_FOR_SCALING])
     except Exception as e:
         st.error(f"Error scaling data. Ensure NUMERICAL_COLS_FOR_SCALING are correct and match the features and type (numerical) in your loaded data: {e}")
         st.stop()
 
 
     # --- 4. Get probabilities from the loaded model ---
-    probabilities = model_obj.predict_proba(X_data_scaled)[:, 1]
+    probabilities = _model_obj.predict_proba(X_data_scaled)[:, 1]
 
     # --- 5. Add predictions and actuals back to the DataFrame for display ---
     data_for_prediction_df['predicted_probability_overdue'] = probabilities

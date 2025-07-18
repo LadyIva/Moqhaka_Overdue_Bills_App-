@@ -203,7 +203,7 @@ def load_and_predict_data(_scaler_obj, _model_obj):
         # Assuming your test data includes customer_id, bill_id, and your target column.
         # If 'bill_id' or 'customer_id' are not in your actual data, adjust the
         # `display_cols` variable in the "Actionable List" section below.
-        df = pd.read_csv(DATA_FILE_PATH)
+        df = pd.read_parquet(DATA_FILE_PATH)
         st.success(f"Successfully loaded data from {DATA_FILE_PATH} with {len(df)} records for prediction.")
     except FileNotFoundError:
         st.error(f"Data file not found at {DATA_FILE_PATH}. Please ensure '{DATA_FILE_PATH}' is in your GitHub repository.")

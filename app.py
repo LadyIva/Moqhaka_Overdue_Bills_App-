@@ -281,6 +281,14 @@ st.sidebar.info(
 )
 
 
+# --- Helper function for CSV download ---
+@st.cache_data  # Cache the conversion to avoid re-running on every page load
+def convert_df_to_csv(df):
+    # This function takes the DataFrame and converts it to a CSV string
+    # It's crucial that 'df' here contains all the rows you want to download.
+    return df.to_csv(index=False).encode("utf-8")
+
+
 # --- Actual Data Loading and Prediction ---
 @st.cache_data  # Caches data loading/processing to avoid re-running on every interaction
 def load_and_predict_data(_scaler_obj, _model_obj):
@@ -540,9 +548,25 @@ if not overdue_predictions_df.empty:
         col for col in display_cols if col in overdue_predictions_df.columns
     ]
 
-    st.dataframe(overdue_predictions_df[existing_display_cols].head(100))
+    st.dataframe(
+        overdue_predictions_df[existing_display_cols], use_container_width=True
+    )
+    # I've added use_container_width=True for better visual fitting, but it's optional.
     st.write(f"Total bills flagged as overdue: {len(overdue_predictions_df)}")
     st.info("Staff can use this list to prioritize proactive outreach.")
+
+    # --- ADD THIS SECTION FOR THE DOWNLOAD BUTTON ---
+    # Pass the FULL overdue_predictions_df to the conversion function
+    csv_data = convert_df_to_csv(overdue_predictions_df)
+
+    st.download_button(
+        label="Download Full Flagged Bills List as CSV",  # Text displayed on the button
+        data=csv_data,
+        file_name="moqhaka_flagged_bills.csv",  # Name of the downloaded file
+        mime="text/csv",
+        help="Click to download the complete list of bills predicted as overdue.",
+    )
+
 else:
     st.info(
         "No bills predicted as overdue at the current threshold. Try lowering the threshold if you expect some."

@@ -14,6 +14,7 @@ from sklearn.metrics import (
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
+import shap
 
 # --- Configuration and Model/Scaler Loading ---
 st.set_page_config(layout="wide", page_title="Moqhaka Overdue Bill Prediction")
@@ -170,6 +171,7 @@ SCALED_NUMERICAL_COLS = [
     "rolling_sum_initial_balance_fwd_30D",
     "rolling_mean_initial_balance_fwd_30D",
     "rolling_std_initial_balance_fwd_30D",
+    "num_estimated_bills_last_30D",
     "num_payments_last_90D",
     "rolling_sum_amount_paid_90D",
     "rolling_mean_amount_paid_90D",
@@ -289,11 +291,32 @@ def convert_df_to_csv(df):
     return df.to_csv(index=False).encode("utf-8")
 
 
-# --- Actual Data Loading and Prediction ---
+# Helper function to get top N SHAP contributors for a row
+def get_top_shap_contributors(shap_values_row, feature_names, n=3):
+    if shap_values_row is None:
+        return "N/A"  # Handle cases where SHAP values weren't computed
+
+    # Create a Series of SHAP values indexed by feature names
+    shap_series = pd.Series(shap_values_row, index=feature_names)
+    # Sort by absolute SHAP value to find most impactful features
+    top_features = shap_series.abs().sort_values(ascending=False).head(n).index.tolist()
+
+    # Format as string for display
+    contributors = []
+    for feat in top_features:
+        value = shap_series[feat]
+        sign = "+" if value >= 0 else "-"
+        # Show sign and magnitude, ensuring feature name matches the original case in FEATURE_COLUMNS
+        contributors.append(f"{feat} ({sign}{abs(value):.2f})")
+    return ", ".join(contributors)
+
+
+# --- Actual Data Loading and Prediction Function ---
 @st.cache_data  # Caches data loading/processing to avoid re-running on every interaction
 def load_and_predict_data(_scaler_obj, _model_obj):
     """
-    Loads actual data from a CSV, scales numerical features, and generates predictions.
+    Loads actual data from a Parquet file, scales numerical features,
+    generates predictions, and calculates SHAP values.
     """
     print("--- Inside load_and_predict_data function ---")
 
@@ -315,11 +338,7 @@ def load_and_predict_data(_scaler_obj, _model_obj):
     else:
         print(f"DEBUG: '{DATA_FOLDER_NAME}' DOES NOT EXIST!")
 
-    # --- 1. Define Feature Columns, Target, and Numerical Columns for Scaling ---
-    # These are now defined globally, but we'll use them here.
-    # TARGET_COLUMN, FEATURE_COLUMNS, SCALED_NUMERICAL_COLS are now accessible.
-
-    # --- 2. Load the data (Revised to use DATA_FULL_PATH and no early return) ---
+    # --- 1. Load the data ---
     try:
         df = pd.read_parquet(DATA_FULL_PATH)
         st.success(
@@ -337,7 +356,7 @@ def load_and_predict_data(_scaler_obj, _model_obj):
         print(f"ERROR: Detailed error during parquet load: {e}")
         st.stop()
 
-    # --- 3. Prepare features (X) and actual labels (y_true) for prediction and evaluation ---
+    # --- 2. Prepare features (X) and actual labels (y_true) for prediction and evaluation ---
     data_for_prediction_df = df.copy()
 
     try:
@@ -392,7 +411,7 @@ def load_and_predict_data(_scaler_obj, _model_obj):
         print(f"ERROR: Scaling failed: {e}")
         st.stop()
 
-    # --- 4. Get probabilities from the loaded model ---
+    # --- 3. Get probabilities from the loaded model ---
     try:
         probabilities = _model_obj.predict_proba(X_data_scaled)[:, 1]
         print(
@@ -405,7 +424,22 @@ def load_and_predict_data(_scaler_obj, _model_obj):
         print(f"ERROR: Model prediction failed: {e}")
         st.stop()
 
-    # --- 5. Add predictions and actuals back to the DataFrame for display ---
+    # --- NEW: Calculate SHAP values ---
+    print("DEBUG: Calculating SHAP values...")
+    try:
+        # SHAP Explainer for tree models
+        explainer = shap.TreeExplainer(_model_obj)
+        # Calculate SHAP values for the scaled data
+        shap_values = explainer.shap_values(X_data_scaled)
+        print(f"DEBUG: SHAP values calculated. Shape: {shap_values.shape}")
+    except Exception as e:
+        st.warning(
+            f"Could not calculate SHAP values: {e}. Feature explanations will not be available."
+        )
+        print(f"WARNING: SHAP calculation failed: {e}")
+        shap_values = None  # Set to None if calculation fails
+
+    # --- 4. Add predictions and actuals back to the DataFrame for display ---
     data_for_prediction_df["predicted_probability_overdue"] = probabilities
     data_for_prediction_df["actual_overdue_status"] = (
         y_true  # This will add the dummy y_true if it was not found
@@ -414,26 +448,33 @@ def load_and_predict_data(_scaler_obj, _model_obj):
         f"DEBUG: Final DataFrame for prediction prepared. Final shape: {data_for_prediction_df.shape}"
     )
 
-    return data_for_prediction_df, y_true
+    # --- NEW: Also return shap_values ---
+    return data_for_prediction_df, y_true, shap_values
 
 
-# --- Main app execution flow (with robust unpacking) ---
-print("--- Calling load_and_predict_data ---")
+# --- Main app execution flow (calling load_and_predict_data once) ---
+print("--- Calling load_and_predict_data outside the function definition ---")
 result_of_load_data = load_and_predict_data(scaler, model)
 
 print(f"DEBUG: Type of result_of_load_data: {type(result_of_load_data)}")
-if isinstance(result_of_load_data, tuple) and len(result_of_load_data) == 2:
-    data_for_prediction, y_true_for_evaluation = result_of_load_data
-    print("DEBUG: Successfully unpacked data_for_prediction and y_true_for_evaluation.")
+# Update this line to expect 3 items now
+if isinstance(result_of_load_data, tuple) and len(result_of_load_data) == 3:
+    data_for_prediction, y_true_for_evaluation, shap_values_df = (
+        result_of_load_data  # Unpack shap_values_df
+    )
+    print(
+        "DEBUG: Successfully unpacked data_for_prediction, y_true_for_evaluation, and shap_values_df."
+    )
     # Proceed with the rest of your Streamlit app
 else:
     st.error(
         "Application setup failed: Data loading and prediction function did not return expected values. Check logs for details."
     )
     print(
-        "ERROR: Application setup failed: load_and_predict_data did not return a 2-item tuple or returned None due to error."
+        "ERROR: Application setup failed: load_and_predict_data did not return a 3-item tuple or returned None due to error."
     )
-    st.stop()  # Stop the app if crucial data isn't loaded correctly
+    st.stop()
+
 
 # --- Make predictions based on the selected threshold ---
 y_pred_threshold = (
@@ -548,6 +589,30 @@ if not overdue_predictions_df.empty:
         col for col in display_cols if col in overdue_predictions_df.columns
     ]
 
+    # --- NEW: Add Top Contributing Factors to the DataFrame ---
+    if shap_values_df is not None:
+        # Map the index of overdue_predictions_df to the original index of data_for_prediction to get correct SHAP rows
+        # This is crucial because overdue_predictions_df is a subset of data_for_prediction
+        original_indices = overdue_predictions_df.index.tolist()
+
+        # Use data_for_prediction's columns for feature names as SHAP values are based on X_data_scaled
+        # Ensure FEATURE_COLUMNS are consistent
+
+        # This applies the helper function row-wise to generate the new column
+        overdue_predictions_df["Top_Risk_Factors"] = [
+            get_top_shap_contributors(
+                shap_values_df[i], FEATURE_COLUMNS
+            )  # Pass shap values for the specific row, and all FEATURE_COLUMNS
+            for i in original_indices  # Iterate over original indices of the full data_for_prediction to get corresponding SHAP values
+        ]
+
+        # Add 'Top_Risk_Factors' to the columns to display
+        existing_display_cols.append("Top_Risk_Factors")
+    else:
+        st.warning(
+            "Feature explanations are not available due to SHAP calculation error."
+        )
+    # --- END NEW ADDITION ---
     st.dataframe(
         overdue_predictions_df[existing_display_cols], use_container_width=True
     )

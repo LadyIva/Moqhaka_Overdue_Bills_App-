@@ -31,6 +31,8 @@ DATA_FILE_NAME = "df_engineered_features.parquet"  # Define the data file name
 
 TARGET_COLUMN = "is_overdue_target"
 
+# --- MODIFIED: Re-added 'num_payments_last_X_D' and 'num_estimated_bills_last_X_D' ---
+# Also adjusted SCALED_NUMERICAL_COLS based on your training script output
 FEATURE_COLUMNS = [
     "initial_balance_fwd",
     "bill_amount_due",
@@ -38,6 +40,7 @@ FEATURE_COLUMNS = [
     "has_payment_agreement",
     "num_dependents",
     "is_prepaid_electricity",
+    # "overdue_likelihood", # Confirmed NOT in numerical_cols for training, so leave removed
     "balance_to_due_ratio",
     "days_to_due_date",
     "prev_bill_amount_due",
@@ -47,6 +50,7 @@ FEATURE_COLUMNS = [
     "prev_is_overdue_target",
     "change_bill_amount_due",
     "num_service_types_on_bill",
+    "num_payments_last_30D",  # RE-ADDED based on your training data
     "rolling_sum_amount_paid_30D",
     "rolling_mean_amount_paid_30D",
     "rolling_std_amount_paid_30D",
@@ -62,6 +66,8 @@ FEATURE_COLUMNS = [
     "rolling_sum_initial_balance_fwd_30D",
     "rolling_mean_initial_balance_fwd_30D",
     "rolling_std_initial_balance_fwd_30D",
+    "num_estimated_bills_last_30D",  # RE-ADDED based on your training data
+    "num_payments_last_90D",  # RE-ADDED based on your training data
     "rolling_sum_amount_paid_90D",
     "rolling_mean_amount_paid_90D",
     "rolling_std_amount_paid_90D",
@@ -77,6 +83,8 @@ FEATURE_COLUMNS = [
     "rolling_sum_initial_balance_fwd_90D",
     "rolling_mean_initial_balance_fwd_90D",
     "rolling_std_initial_balance_fwd_90D",
+    "num_estimated_bills_last_90D",  # RE-ADDED based on your training data
+    "num_payments_last_180D",  # RE-ADDED based on your training data
     "rolling_sum_amount_paid_180D",
     "rolling_mean_amount_paid_180D",
     "rolling_std_amount_paid_180D",
@@ -92,6 +100,8 @@ FEATURE_COLUMNS = [
     "rolling_sum_initial_balance_fwd_180D",
     "rolling_mean_initial_balance_fwd_180D",
     "rolling_std_initial_balance_fwd_180D",
+    "num_estimated_bills_last_180D",  # RE-ADDED based on your training data
+    "num_payments_last_365D",  # RE-ADDED based on your training data
     "rolling_sum_amount_paid_365D",
     "rolling_mean_amount_paid_365D",
     "rolling_std_amount_paid_365D",
@@ -107,6 +117,7 @@ FEATURE_COLUMNS = [
     "rolling_sum_initial_balance_fwd_365D",
     "rolling_mean_initial_balance_fwd_365D",
     "rolling_std_initial_balance_fwd_365D",
+    "num_estimated_bills_last_365D",  # RE-ADDED based on your training data
     "prev_initial_balance_fwd_1m",
     "change_initial_balance_1m",
     "balance_to_avg_bill_ratio",
@@ -133,11 +144,14 @@ FEATURE_COLUMNS = [
     "historical_payment_behavior_Poor",
 ]
 
-# --- MODIFIED: Removed 'overdue_likelihood', 'num_payments_last_X_D', and 'num_estimated_bills_last_X_D' ---
+# --- MODIFIED: Adjusted SCALED_NUMERICAL_COLS based on your training script output ---
+# 'num_payments_last_30D' and 'num_estimated_bills_last_30D' are binary, NOT scaled.
+# 'num_payments_last_90D', 'num_estimated_bills_last_90D', etc. ARE scaled.
 SCALED_NUMERICAL_COLS = [
     "initial_balance_fwd",
     "bill_amount_due",
     "num_dependents",
+    # "overdue_likelihood", # Was confirmed as not in numerical_cols
     "balance_to_due_ratio",
     "days_to_due_date",
     "prev_bill_amount_due",
@@ -146,6 +160,7 @@ SCALED_NUMERICAL_COLS = [
     "prev_num_days_overdue_at_snapshot",
     "change_bill_amount_due",
     "num_service_types_on_bill",
+    # 'num_payments_last_30D' (binary, not scaled)
     "rolling_sum_amount_paid_30D",
     "rolling_mean_amount_paid_30D",
     "rolling_std_amount_paid_30D",
@@ -161,6 +176,8 @@ SCALED_NUMERICAL_COLS = [
     "rolling_sum_initial_balance_fwd_30D",
     "rolling_mean_initial_balance_fwd_30D",
     "rolling_std_initial_balance_fwd_30D",
+    # 'num_estimated_bills_last_30D' (binary, not scaled)
+    "num_payments_last_90D",  # Scaled
     "rolling_sum_amount_paid_90D",
     "rolling_mean_amount_paid_90D",
     "rolling_std_amount_paid_90D",
@@ -176,6 +193,8 @@ SCALED_NUMERICAL_COLS = [
     "rolling_sum_initial_balance_fwd_90D",
     "rolling_mean_initial_balance_fwd_90D",
     "rolling_std_initial_balance_fwd_90D",
+    "num_estimated_bills_last_90D",  # Scaled
+    "num_payments_last_180D",  # Scaled
     "rolling_sum_amount_paid_180D",
     "rolling_mean_amount_paid_180D",
     "rolling_std_amount_paid_180D",
@@ -191,6 +210,8 @@ SCALED_NUMERICAL_COLS = [
     "rolling_sum_initial_balance_fwd_180D",
     "rolling_mean_initial_balance_fwd_180D",
     "rolling_std_initial_balance_fwd_180D",
+    "num_estimated_bills_last_180D",  # Scaled
+    "num_payments_last_365D",  # Scaled
     "rolling_sum_amount_paid_365D",
     "rolling_mean_amount_paid_365D",
     "rolling_std_amount_paid_365D",
@@ -206,6 +227,7 @@ SCALED_NUMERICAL_COLS = [
     "rolling_sum_initial_balance_fwd_365D",
     "rolling_mean_initial_balance_fwd_365D",
     "rolling_std_initial_balance_fwd_365D",
+    "num_estimated_bills_last_365D",  # Scaled
     "prev_initial_balance_fwd_1m",
     "change_initial_balance_1m",
     "balance_to_avg_bill_ratio",
@@ -512,6 +534,7 @@ else:
     col3.metric("F1-Score", "N/A")
     col4.metric("Accuracy", "N/A")
 
+st.write(f"ROC AUC: {roc_auc:.4f}")  # Duplicated, remove one if running locally
 st.markdown("---")
 
 # --- Confusion Matrix ---

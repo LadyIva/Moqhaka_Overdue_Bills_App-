@@ -25,12 +25,12 @@ SCALER_PATH = "model_artifacts/scaler.pkl"
 DATA_FOLDER_NAME = "data"  # Define the folder name once
 DATA_FILE_NAME = "df_engineered_features.parquet"  # Define the data file name
 
-# --- IMPORTANT FIX: Define FEATURE_COLUMNS and SCALED_NUMERICAL_COLS globally ---
+# --- IMPORTANT: Define FEATURE_COLUMNS and SCALED_NUMERICAL_COLS globally ---
 # These lists must be accessible by all parts of the script, including display sections.
+# They MUST precisely match the features used to train the model, in the correct order.
 
 TARGET_COLUMN = "is_overdue_target"
 
-# THIS IS THE CRITICAL CHANGE from previous iteration, now defined globally:
 FEATURE_COLUMNS = [
     "initial_balance_fwd",
     "bill_amount_due",
@@ -38,7 +38,6 @@ FEATURE_COLUMNS = [
     "has_payment_agreement",
     "num_dependents",
     "is_prepaid_electricity",
-    "overdue_likelihood",
     "balance_to_due_ratio",
     "days_to_due_date",
     "prev_bill_amount_due",
@@ -48,7 +47,6 @@ FEATURE_COLUMNS = [
     "prev_is_overdue_target",
     "change_bill_amount_due",
     "num_service_types_on_bill",
-    "num_payments_last_30D",
     "rolling_sum_amount_paid_30D",
     "rolling_mean_amount_paid_30D",
     "rolling_std_amount_paid_30D",
@@ -64,8 +62,6 @@ FEATURE_COLUMNS = [
     "rolling_sum_initial_balance_fwd_30D",
     "rolling_mean_initial_balance_fwd_30D",
     "rolling_std_initial_balance_fwd_30D",
-    "num_estimated_bills_last_30D",
-    "num_payments_last_90D",
     "rolling_sum_amount_paid_90D",
     "rolling_mean_amount_paid_90D",
     "rolling_std_amount_paid_90D",
@@ -81,8 +77,6 @@ FEATURE_COLUMNS = [
     "rolling_sum_initial_balance_fwd_90D",
     "rolling_mean_initial_balance_fwd_90D",
     "rolling_std_initial_balance_fwd_90D",
-    "num_estimated_bills_last_90D",
-    "num_payments_last_180D",
     "rolling_sum_amount_paid_180D",
     "rolling_mean_amount_paid_180D",
     "rolling_std_amount_paid_180D",
@@ -98,8 +92,6 @@ FEATURE_COLUMNS = [
     "rolling_sum_initial_balance_fwd_180D",
     "rolling_mean_initial_balance_fwd_180D",
     "rolling_std_initial_balance_fwd_180D",
-    "num_estimated_bills_last_180D",
-    "num_payments_last_365D",
     "rolling_sum_amount_paid_365D",
     "rolling_mean_amount_paid_365D",
     "rolling_std_amount_paid_365D",
@@ -115,7 +107,6 @@ FEATURE_COLUMNS = [
     "rolling_sum_initial_balance_fwd_365D",
     "rolling_mean_initial_balance_fwd_365D",
     "rolling_std_initial_balance_fwd_365D",
-    "num_estimated_bills_last_365D",
     "prev_initial_balance_fwd_1m",
     "change_initial_balance_1m",
     "balance_to_avg_bill_ratio",
@@ -142,12 +133,11 @@ FEATURE_COLUMNS = [
     "historical_payment_behavior_Poor",
 ]
 
-
+# --- MODIFIED: Removed 'overdue_likelihood', 'num_payments_last_X_D', and 'num_estimated_bills_last_X_D' ---
 SCALED_NUMERICAL_COLS = [
     "initial_balance_fwd",
     "bill_amount_due",
     "num_dependents",
-    "overdue_likelihood",
     "balance_to_due_ratio",
     "days_to_due_date",
     "prev_bill_amount_due",
@@ -171,8 +161,6 @@ SCALED_NUMERICAL_COLS = [
     "rolling_sum_initial_balance_fwd_30D",
     "rolling_mean_initial_balance_fwd_30D",
     "rolling_std_initial_balance_fwd_30D",
-    "num_estimated_bills_last_30D",
-    "num_payments_last_90D",
     "rolling_sum_amount_paid_90D",
     "rolling_mean_amount_paid_90D",
     "rolling_std_amount_paid_90D",
@@ -188,8 +176,6 @@ SCALED_NUMERICAL_COLS = [
     "rolling_sum_initial_balance_fwd_90D",
     "rolling_mean_initial_balance_fwd_90D",
     "rolling_std_initial_balance_fwd_90D",
-    "num_estimated_bills_last_90D",
-    "num_payments_last_180D",
     "rolling_sum_amount_paid_180D",
     "rolling_mean_amount_paid_180D",
     "rolling_std_amount_paid_180D",
@@ -205,8 +191,6 @@ SCALED_NUMERICAL_COLS = [
     "rolling_sum_initial_balance_fwd_180D",
     "rolling_mean_initial_balance_fwd_180D",
     "rolling_std_initial_balance_fwd_180D",
-    "num_estimated_bills_last_180D",
-    "num_payments_last_365D",
     "rolling_sum_amount_paid_365D",
     "rolling_mean_amount_paid_365D",
     "rolling_std_amount_paid_365D",
@@ -222,7 +206,6 @@ SCALED_NUMERICAL_COLS = [
     "rolling_sum_initial_balance_fwd_365D",
     "rolling_mean_initial_balance_fwd_365D",
     "rolling_std_initial_balance_fwd_365D",
-    "num_estimated_bills_last_365D",
     "prev_initial_balance_fwd_1m",
     "change_initial_balance_1m",
     "balance_to_avg_bill_ratio",
@@ -593,17 +576,15 @@ if not overdue_predictions_df.empty:
     if shap_values_df is not None:
         # Map the index of overdue_predictions_df to the original index of data_for_prediction to get correct SHAP rows
         # This is crucial because overdue_predictions_df is a subset of data_for_prediction
-        original_indices = overdue_predictions_df.index.tolist()
-
-        # Use data_for_prediction's columns for feature names as SHAP values are based on X_data_scaled
-        # Ensure FEATURE_COLUMNS are consistent
+        # We need the original index to align with the SHAP values array
+        original_indices_in_full_df = overdue_predictions_df.index.tolist()
 
         # This applies the helper function row-wise to generate the new column
         overdue_predictions_df["Top_Risk_Factors"] = [
             get_top_shap_contributors(
-                shap_values_df[i], FEATURE_COLUMNS
-            )  # Pass shap values for the specific row, and all FEATURE_COLUMNS
-            for i in original_indices  # Iterate over original indices of the full data_for_prediction to get corresponding SHAP values
+                shap_values_df[data_for_prediction.index.get_loc(idx)], FEATURE_COLUMNS
+            )
+            for idx in original_indices_in_full_df
         ]
 
         # Add 'Top_Risk_Factors' to the columns to display
@@ -616,7 +597,6 @@ if not overdue_predictions_df.empty:
     st.dataframe(
         overdue_predictions_df[existing_display_cols], use_container_width=True
     )
-    # I've added use_container_width=True for better visual fitting, but it's optional.
     st.write(f"Total bills flagged as overdue: {len(overdue_predictions_df)}")
     st.info("Staff can use this list to prioritize proactive outreach.")
 
@@ -645,13 +625,14 @@ st.header("💡 Model Insights: Top Contributing Factors")
 st.write("Understanding which factors most influence the model's predictions.")
 
 # Get feature importance and ensure feature names are aligned
+# Note: For XGBoost, model.feature_names_in_ is the most reliable way to get feature names
 if hasattr(model, "feature_names_in_") and model.feature_names_in_ is not None:
     feature_names_for_importance = model.feature_names_in_
 elif hasattr(model, "feature_names") and model.feature_names is not None:
     feature_names_for_importance = model.feature_names
 else:
     # Fallback: Use the FEATURE_COLUMNS defined for data loading in the app
-    # This might not be ideal if the model's features are different from these.
+    # This should now be accurate given our previous corrections
     feature_names_for_importance = FEATURE_COLUMNS
 
 feature_importances = model.feature_importances_

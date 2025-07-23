@@ -786,23 +786,33 @@ if not filtered_overdue_predictions_df.empty:
             explainer = shap.TreeExplainer(model)
 
             # Get the single SHAP values array for the selected instance
-            shap_values_instance = shap_values_df[shap_index_in_array]
+            shap_values_for_instance = shap_values_df.loc[
+                selected_bill_id
+            ].values  # Use .loc for safety, and .values to get numpy array
             # Get the single feature values array for the selected instance (scaled)
-            feature_values_instance = X_scaled_for_shap.iloc[shap_index_in_array]
+            feature_values_for_instance = X_scaled_for_shap.loc[
+                selected_bill_id
+            ]  # This is a pandas Series with feature names as index
 
-            # Ensure feature names are aligned for the plot
-            feature_names_for_shap = X_scaled_for_shap.columns.tolist()
+            # Get the list of feature names (assuming X_scaled_for_shap is a DataFrame)
+            feature_names_list = X_scaled_for_shap.columns.tolist()
 
+            # Create the shap.Explanation object for this specific instance
+            explanation_for_waterfall = shap.Explanation(
+                values=shap_values_for_instance,
+                base_values=explainer.expected_value,  # This comes from your explainer
+                data=feature_values_for_instance.values,  # Pass the raw feature values as a numpy array
+                feature_names=feature_names_list,
+            )
+            fig_shap, ax_shap = plt.subplots(figsize=(10, 7))
             # Plot the waterfall
             # We need to capture the matplotlib figure from SHAP's plot function
             # and then pass it to st.pyplot.
             # To prevent SHAP from immediately showing the plot, set show=False
-            fig_shap, ax_shap = plt.subplots(figsize=(10, 7))
             shap.waterfall_plot(
-                shap_values_instance,
-                feature_values_instance,
-                # show=False,  # Important: Don't show immediately
-                # max_display=15,  # Display more features if needed
+                explanation_for_waterfall,  # Pass the Explanation object here
+                max_display=15,  # Re-introduce max_display
+                show=False,  # Re-introduce show=False for Streamlit
             )
             plt.tight_layout()  # Adjust layout to prevent labels from overlapping
             st.pyplot(fig_shap)  # Display the plot in Streamlit

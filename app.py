@@ -801,8 +801,8 @@ if not filtered_overdue_predictions_df.empty:
             shap.waterfall_plot(
                 shap_values_instance,
                 feature_values_instance,
-                show=False,  # Important: Don't show immediately
-                max_display=15,  # Display more features if needed
+                # show=False,  # Important: Don't show immediately
+                # max_display=15,  # Display more features if needed
             )
             plt.tight_layout()  # Adjust layout to prevent labels from overlapping
             st.pyplot(fig_shap)  # Display the plot in Streamlit

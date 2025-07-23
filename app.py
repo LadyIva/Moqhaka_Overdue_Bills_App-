@@ -282,10 +282,44 @@ prediction_threshold = st.sidebar.slider(
     step=0.01,
     help="Adjust this threshold to see how it affects the model's performance (Precision vs. Recall). A lower threshold increases Recall but may decrease Precision.",
 )
-st.sidebar.markdown("---")
+
+# --- Start of Filter Actionable List (Moved up for clarity in logical flow) ---
+st.sidebar.header("Filter Actionable List")
+
+# Customer Type Filter
+all_customer_types = ["Commercial", "Government", "Indigent", "Residential"]
+selected_customer_types = st.sidebar.multiselect(
+    "Filter by Customer Type:", options=all_customer_types, default=all_customer_types
+)
+
+# Property Value Category Filter
+all_property_values = ["High", "Low", "Medium"]
+selected_property_values = st.sidebar.multiselect(
+    "Filter by Property Value Category:",
+    options=all_property_values,
+    default=all_property_values,
+)
+
+# Ward Filter (assuming wards are 'Ward_1', 'Ward_2', etc. based on your features)
+# You'll need to extract the actual unique wards from your data.
+# For now, let's assume a generic way to get them.
+# This assumes 'ward_Ward_X' are your column names.
+ward_cols = [col for col in FEATURE_COLUMNS if col.startswith("ward_Ward_")]
+all_wards = [col.replace("ward_", "") for col in ward_cols]
+selected_wards = st.sidebar.multiselect(
+    "Filter by Ward:", options=all_wards, default=all_wards
+)
+
+# Filter for estimated readings (related to transparency)
+filter_estimated_reading = st.sidebar.checkbox(
+    "Only show bills with Estimated Reading (is_estimated_reading=1)", value=False
+)
+
+st.sidebar.markdown("---")  # Visual separator
 st.sidebar.info(
     "This is a prototype. Data used is illustrative. For full functionality, actual municipal data would be loaded."
 )
+# --- End of Filter Actionable List ---
 
 
 # --- Helper function for CSV download ---
@@ -453,8 +487,8 @@ def load_and_predict_data(_scaler_obj, _model_obj):
         f"DEBUG: Final DataFrame for prediction prepared. Final shape: {data_for_prediction_df.shape}"
     )
 
-    # --- NEW: Also return shap_values ---
-    return data_for_prediction_df, y_true, shap_values
+    # --- NEW: Also return shap_values and X_data_scaled ---
+    return data_for_prediction_df, y_true, shap_values, X_data_scaled
 
 
 # --- Main app execution flow (calling load_and_predict_data once) ---
@@ -462,13 +496,13 @@ print("--- Calling load_and_predict_data outside the function definition ---")
 result_of_load_data = load_and_predict_data(scaler, model)
 
 print(f"DEBUG: Type of result_of_load_data: {type(result_of_load_data)}")
-# Update this line to expect 3 items now
-if isinstance(result_of_load_data, tuple) and len(result_of_load_data) == 3:
-    data_for_prediction, y_true_for_evaluation, shap_values_df = (
-        result_of_load_data  # Unpack shap_values_df
+# --- FIX: Changed len(result_of_load_data) == 3 to == 4 ---
+if isinstance(result_of_load_data, tuple) and len(result_of_load_data) == 4:
+    data_for_prediction, y_true_for_evaluation, shap_values_df, X_scaled_for_shap = (
+        result_of_load_data  # Unpack shap_values_df and X_scaled_for_shap
     )
     print(
-        "DEBUG: Successfully unpacked data_for_prediction, y_true_for_evaluation, and shap_values_df."
+        "DEBUG: Successfully unpacked data_for_prediction, y_true_for_evaluation, shap_values_df, and X_scaled_for_shap."
     )
     # Proceed with the rest of your Streamlit app
 else:
@@ -476,7 +510,7 @@ else:
         "Application setup failed: Data loading and prediction function did not return expected values. Check logs for details."
     )
     print(
-        "ERROR: Application setup failed: load_and_predict_data did not return a 3-item tuple or returned None due to error."
+        "ERROR: Application setup failed: load_and_predict_data did not return a 4-item tuple or returned None due to error."
     )
     st.stop()
 
@@ -524,7 +558,7 @@ if (
     col4.metric(
         "Accuracy", f"{accuracy:.2%}", help="Overall correctness of predictions."
     )
-    st.write(f"ROC AUC: {roc_auc:.4f}")
+    st.write(f"ROC AUC: {roc_auc:.4f}")  # Keep this one
 else:
     st.warning(
         "Performance metrics (Accuracy, Precision, Recall, F1, ROC AUC) cannot be calculated because the target column ('is_overdue_target') was not found or was empty in the loaded data."
@@ -534,7 +568,7 @@ else:
     col3.metric("F1-Score", "N/A")
     col4.metric("Accuracy", "N/A")
 
-st.write(f"ROC AUC: {roc_auc:.4f}")  # Duplicated, remove one if running locally
+# st.write(f"ROC AUC: {roc_auc:.4f}")  # --- FIX: Removed duplicated line ---
 st.markdown("---")
 
 # --- Confusion Matrix ---
@@ -569,14 +603,87 @@ st.write(
     f"Displaying bills with a predicted probability of being overdue >= {prediction_threshold:.2f}."
 )
 
-overdue_predictions_df = data_for_prediction[y_pred_threshold == 1].copy()
-overdue_predictions_df = overdue_predictions_df.sort_values(
+# --- FIX: Initialize overdue_predictions_df BEFORE filtering ---
+overdue_predictions_initial_df = data_for_prediction[y_pred_threshold == 1].copy()
+overdue_predictions_initial_df = overdue_predictions_initial_df.sort_values(
     by="predicted_probability_overdue", ascending=False
 )
 
-if not overdue_predictions_df.empty:
+# Apply filters
+filtered_overdue_predictions_df = (
+    overdue_predictions_initial_df.copy()
+)  # Start with the initially flagged bills
+
+# Apply customer type filter
+if selected_customer_types:
+    customer_type_filters = [f"customer_type_{ct}" for ct in selected_customer_types]
+    # Filter where any of the selected customer type columns are 1
+    # Check if the columns actually exist before trying to filter
+    existing_type_filters = [
+        f for f in customer_type_filters if f in filtered_overdue_predictions_df.columns
+    ]
+    if existing_type_filters:
+        filtered_overdue_predictions_df = filtered_overdue_predictions_df[
+            filtered_overdue_predictions_df[existing_type_filters].any(axis=1)
+        ]
+    else:
+        st.warning(
+            "Selected customer type filter columns not found in data. Filtering skipped."
+        )
+
+
+# Apply property value category filter
+if selected_property_values:
+    property_value_filters = [
+        f"property_value_category_{pv}" for pv in selected_property_values
+    ]
+    existing_property_filters = [
+        f
+        for f in property_value_filters
+        if f in filtered_overdue_predictions_df.columns
+    ]
+    if existing_property_filters:
+        filtered_overdue_predictions_df = filtered_overdue_predictions_df[
+            filtered_overdue_predictions_df[existing_property_filters].any(axis=1)
+        ]
+    else:
+        st.warning(
+            "Selected property value category filter columns not found in data. Filtering skipped."
+        )
+
+
+# Apply ward filter
+if selected_wards:
+    ward_filters = [f"ward_{w}" for w in selected_wards]
+    existing_ward_filters = [
+        f for f in ward_filters if f in filtered_overdue_predictions_df.columns
+    ]
+    if existing_ward_filters:
+        filtered_overdue_predictions_df = filtered_overdue_predictions_df[
+            filtered_overdue_predictions_df[existing_ward_filters].any(axis=1)
+        ]
+    else:
+        st.warning("Selected ward filter columns not found in data. Filtering skipped.")
+
+
+# Apply estimated reading filter
+if filter_estimated_reading:
+    if "is_estimated_reading" in filtered_overdue_predictions_df.columns:
+        filtered_overdue_predictions_df = filtered_overdue_predictions_df[
+            filtered_overdue_predictions_df["is_estimated_reading"] == 1
+        ]
+    else:
+        st.warning(
+            "Column 'is_estimated_reading' not found for filtering. Filtering skipped."
+        )
+
+
+# Now display filtered_overdue_predictions_df
+if not filtered_overdue_predictions_df.empty:
     id_cols = ["customer_id", "bill_id"]
-    existing_id_cols = [col for col in id_cols if col in overdue_predictions_df.columns]
+    existing_id_cols = [
+        col for col in id_cols if col in filtered_overdue_predictions_df.columns
+    ]
 
     display_cols = existing_id_cols + [
         "predicted_probability_overdue",
@@ -587,23 +694,24 @@ if not overdue_predictions_df.empty:
         [
             col
             for col in FEATURE_COLUMNS
-            if col not in display_cols and col in overdue_predictions_df.columns
+            if col not in display_cols
+            and col in filtered_overdue_predictions_df.columns
         ]
     )
 
     existing_display_cols = [
-        col for col in display_cols if col in overdue_predictions_df.columns
+        col for col in display_cols if col in filtered_overdue_predictions_df.columns
     ]
 
     # --- NEW: Add Top Contributing Factors to the DataFrame ---
     if shap_values_df is not None:
-        # Map the index of overdue_predictions_df to the original index of data_for_prediction to get correct SHAP rows
-        # This is crucial because overdue_predictions_df is a subset of data_for_prediction
+        # Map the index of filtered_overdue_predictions_df to the original index of data_for_prediction to get correct SHAP rows
+        # This is crucial because filtered_overdue_predictions_df is a subset of data_for_prediction
         # We need the original index to align with the SHAP values array
-        original_indices_in_full_df = overdue_predictions_df.index.tolist()
+        original_indices_in_full_df = filtered_overdue_predictions_df.index.tolist()
 
         # This applies the helper function row-wise to generate the new column
-        overdue_predictions_df["Top_Risk_Factors"] = [
+        filtered_overdue_predictions_df["Top_Risk_Factors"] = [
             get_top_shap_contributors(
                 shap_values_df[data_for_prediction.index.get_loc(idx)], FEATURE_COLUMNS
             )
@@ -617,15 +725,16 @@ if not overdue_predictions_df.empty:
             "Feature explanations are not available due to SHAP calculation error."
         )
     # --- END NEW ADDITION ---
+
     st.dataframe(
-        overdue_predictions_df[existing_display_cols], use_container_width=True
+        filtered_overdue_predictions_df[existing_display_cols], use_container_width=True
     )
-    st.write(f"Total bills flagged as overdue: {len(overdue_predictions_df)}")
+    st.write(f"Total bills flagged as overdue: {len(filtered_overdue_predictions_df)}")
     st.info("Staff can use this list to prioritize proactive outreach.")
 
     # --- ADD THIS SECTION FOR THE DOWNLOAD BUTTON ---
-    # Pass the FULL overdue_predictions_df to the conversion function
-    csv_data = convert_df_to_csv(overdue_predictions_df)
+    # Pass the FULL filtered_overdue_predictions_df to the conversion function
+    csv_data = convert_df_to_csv(filtered_overdue_predictions_df)
 
     st.download_button(
         label="Download Full Flagged Bills List as CSV",  # Text displayed on the button
@@ -637,11 +746,88 @@ if not overdue_predictions_df.empty:
 
 else:
     st.info(
-        "No bills predicted as overdue at the current threshold. Try lowering the threshold if you expect some."
+        "No bills predicted as overdue at the current threshold and filters. Try adjusting the threshold or filters."
     )
 
 
 st.markdown("---")
+
+# Section for individual SHAP plots
+st.markdown("---")
+st.header("🔍 Individual Bill Explanation (SHAP Deep Dive)")
+st.write(
+    "Select a Bill ID from the table above to understand the key factors influencing its overdue prediction."
+)
+
+# --- FIX: Use filtered_overdue_predictions_df for the selectbox ---
+if not filtered_overdue_predictions_df.empty:
+    selected_bill_id = st.selectbox(
+        "Select Bill ID:", filtered_overdue_predictions_df["bill_id"].unique()
+    )
+
+    if selected_bill_id:
+        # Get the row for the selected bill from the original, full data_for_prediction
+        # This is because selected_bill_row will be used to get original_index,
+        # which needs to align with data_for_prediction.
+        selected_bill_row = data_for_prediction[
+            data_for_prediction["bill_id"] == selected_bill_id
+        ].iloc[0]
+
+        # Get the corresponding SHAP values and original features for this bill
+        # Use .index.get_loc() to find the integer position in the original full DataFrame
+        # which aligns with the shap_values_df array.
+        original_index = selected_bill_row.name
+        shap_index_in_array = data_for_prediction.index.get_loc(original_index)
+
+        if shap_values_df is not None:
+            st.subheader(f"SHAP Waterfall Plot for Bill ID: {selected_bill_id}")
+
+            # Create a SHAP explainer (can be re-used from load_model_and_scaler if passed)
+            explainer = shap.TreeExplainer(model)
+
+            # Get the single SHAP values array for the selected instance
+            shap_values_instance = shap_values_df[shap_index_in_array]
+            # Get the single feature values array for the selected instance (scaled)
+            feature_values_instance = X_scaled_for_shap.iloc[shap_index_in_array]
+
+            # Ensure feature names are aligned for the plot
+            feature_names_for_shap = X_scaled_for_shap.columns.tolist()
+
+            # Plot the waterfall
+            # We need to capture the matplotlib figure from SHAP's plot function
+            # and then pass it to st.pyplot.
+            # To prevent SHAP from immediately showing the plot, set show=False
+            fig_shap, ax_shap = plt.subplots(figsize=(10, 7))
+            shap.waterfall_plot(
+                shap_values_instance,
+                feature_values_instance,
+                feature_names=feature_names_for_shap,
+                show=False,  # Important: Don't show immediately
+                max_display=15,  # Display more features if needed
+            )
+            plt.tight_layout()  # Adjust layout to prevent labels from overlapping
+            st.pyplot(fig_shap)  # Display the plot in Streamlit
+            plt.close(fig_shap)  # Close the figure to free memory
+
+            st.write(
+                f"**Base Value (Expected Model Output):** {explainer.expected_value:.2f}"
+            )
+            st.write(
+                f"**Prediction for this bill:** {selected_bill_row['predicted_probability_overdue']:.2f}"
+            )
+            st.info(
+                "This plot shows how each feature contributes to pushing the bill's probability "
+                "from the average (base value) to its final prediction. Red indicates a positive "
+                "(increases overdue likelihood) contribution, blue indicates negative."
+            )
+        else:
+            st.warning(
+                "SHAP values were not computed, so individual explanations are unavailable."
+            )
+else:
+    st.info(
+        "Select a threshold that flags bills as overdue and apply filters to see individual explanations."
+    )
 
 # --- Section 3: Model Insights - Feature Importance ---
 st.header("💡 Model Insights: Top Contributing Factors")

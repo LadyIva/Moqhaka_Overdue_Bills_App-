@@ -16,9 +16,6 @@ import seaborn as sns
 import os
 import shap
 
-st.write(f"DEBUG: SHAP version installed: {shap.__version__}")  # ADD THIS LINE
-st.write(f"DEBUG: SHAP module path: {shap.__file__}") # ADD THIS LINE
-
 # --- Configuration and Model/Scaler Loading ---
 st.set_page_config(layout="wide", page_title="Moqhaka Overdue Bill Prediction")
 

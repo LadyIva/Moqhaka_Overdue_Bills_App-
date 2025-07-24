@@ -821,7 +821,11 @@ if not filtered_overdue_predictions_df.empty:
         shap_index_in_array = data_for_prediction.index.get_loc(original_index)
 
         if shap_values_df is not None:
-            st.subheader(f"SHAP Waterfall Plot for Bill ID: {selected_bill_id}")
+            st.markdown(
+                f"**SHAP Waterfall Plot for Bill ID:** <span style='font-size: 16px;'>{selected_bill_id}</span>",
+                unsafe_allow_html=True,
+            )
+            # You can adjust '16px' to whatever size looks best (e.g., 14px, 18px)
 
             # Create a SHAP explainer (can be re-used from load_model_and_scaler if passed)
             explainer = shap.TreeExplainer(model)
@@ -844,7 +848,7 @@ if not filtered_overdue_predictions_df.empty:
                 data=feature_values_for_instance.values,  # Pass the raw feature values as a numpy array
                 feature_names=feature_names_list,
             )
-            fig_shap, ax_shap = plt.subplots(figsize=(10, 7))
+            fig_shap, ax_shap = plt.subplots(figsize=(7, 5))
 
             # Plot the waterfall
             # We need to capture the matplotlib figure from SHAP's plot function

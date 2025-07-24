@@ -793,11 +793,9 @@ else:
         "No bills predicted as overdue at the current threshold and filters. Try adjusting the threshold or filters."
     )
 
-
 st.markdown("---")
 
-# Section for individual SHAP plots
-st.markdown("---")
+# Section for individual SHAP plot
 st.header("🔍 Individual Bill Explanation (SHAP Deep Dive)")
 st.write(
     "Select a Bill ID from the table above to understand the key factors influencing its overdue prediction."

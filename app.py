@@ -384,6 +384,24 @@ def load_and_predict_data(_scaler_obj, _model_obj):
             f"Successfully loaded data from {DATA_FULL_PATH} with {len(df)} records for prediction."
         )
         print(f"DEBUG: Parquet file loaded successfully. Shape: {df.shape}")
+
+        # --- ADD THESE DEBUGGING LINES *HERE* ---
+        st.write(
+            "--- Debugging Bill IDs (after initial load, before any sampling/filtering) ---"
+        )
+        st.write(f"Total rows in loaded DataFrame (df): {len(df)}")
+        st.write(f"Count of NaN Bill IDs: {df['bill_id'].isnull().sum()}")
+        st.write(f"Count of Empty String Bill IDs: {(df['bill_id'] == '').sum()}")
+        st.write(
+            f"Count of Bill IDs with only spaces: {(df['bill_id'].astype(str).str.strip() == '').sum()}"
+        )
+        # Optional: Display a few actual rows with empty/NaN bill_ids if you find any
+        # empty_id_rows = df[df['bill_id'].isnull() | (df['bill_id'] == '') | (df['bill_id'].astype(str).str.strip() == '')]
+        # if not empty_id_rows.empty:
+        #     st.write("Sample of rows with empty/NaN bill_id:", empty_id_rows.head())
+        st.write("--- End Debugging Bill IDs ---")
+    # --- END DEBUGGING LINES ---
+
     except FileNotFoundError:
         st.error(
             f"Data file not found at {DATA_FULL_PATH}. Please ensure '{DATA_FULL_PATH}' is in your GitHub repository."

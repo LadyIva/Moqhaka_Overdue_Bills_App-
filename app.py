@@ -821,8 +821,9 @@ if not filtered_overdue_predictions_df.empty:
         shap_index_in_array = data_for_prediction.index.get_loc(original_index)
 
         if shap_values_df is not None:
+            # --- START: Simplified Waterfall Plot Adjustments ---
             st.markdown(
-                f"**SHAP Waterfall Plot for Bill ID:** <span style='font-size: 16px;'>{selected_bill_id}</span>",
+                f"**Detailed Contribution Plot for Bill ID:** <span style='font-size: 16px;'>{selected_bill_id}</span>",
                 unsafe_allow_html=True,
             )
             # You can adjust '16px' to whatever size looks best (e.g., 14px, 18px)
@@ -848,33 +849,35 @@ if not filtered_overdue_predictions_df.empty:
                 data=feature_values_for_instance.values,  # Pass the raw feature values as a numpy array
                 feature_names=feature_names_list,
             )
-            fig_shap, ax_shap = plt.subplots(figsize=(7, 5))
+            fig_shap, ax_shap = plt.subplots(
+                figsize=(7, 5)
+            )  # Keep figsize compact, or adjust as needed
 
             # Plot the waterfall
-            # We need to capture the matplotlib figure from SHAP's plot function
-            # and then pass it to st.pyplot.
-            # To prevent SHAP from immediately showing the plot, set show=False
             shap.waterfall_plot(
-                explanation_for_waterfall,  # Pass the Explanation object here
-                max_display=15,  # Re-introduce max_display
-                show=False,  # Re-introduce show=False for Streamlit
+                explanation_for_waterfall,
+                max_display=7,  # <-- CRITICAL CHANGE: Reduce features displayed for simplicity
+                show=False,
             )
 
             plt.tight_layout()  # Adjust layout to prevent labels from overlapping
             st.pyplot(fig_shap)  # Display the plot in Streamlit
             plt.close(fig_shap)  # Close the figure to free memory
 
+            # Re-confirming the st.write for better understanding
             st.write(
-                f"**Base Value (Expected Model Output):** {explainer.expected_value.item():.2f}"
+                f"**Base Value (Average Model Output):** {explainer.expected_value.item():.2f}"
             )
             st.write(
                 f"**Prediction for this bill:** {selected_bill_row['predicted_probability_overdue']:.2f}"
             )
             st.info(
                 "This plot shows how each feature contributes to pushing the bill's probability "
-                "from the average (base value) to its final prediction. Red indicates a positive "
-                "(increases overdue likelihood) contribution, blue indicates negative."
+                "from the average (base value) to its final prediction. Red bars indicate "
+                "features that increase the likelihood of being overdue, while blue bars "
+                "indicate features that decrease it. Only the most impactful features are shown."
             )
+            # --- END: Simplified Waterfall Plot Adjustments ---
         else:
             st.warning(
                 "SHAP values were not computed, so individual explanations are unavailable."

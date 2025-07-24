@@ -774,7 +774,6 @@ if not filtered_overdue_predictions_df.empty:
         ].iloc[0]
 
         # Get the corresponding SHAP values and original features for this bill
-        # Use .index.get_loc() to find the integer position in the original full DataFrame
         # which aligns with the shap_values_df array.
         original_index = selected_bill_row.name
         shap_index_in_array = data_for_prediction.index.get_loc(original_index)
@@ -785,16 +784,15 @@ if not filtered_overdue_predictions_df.empty:
             # Create a SHAP explainer (can be re-used from load_model_and_scaler if passed)
             explainer = shap.TreeExplainer(model)
 
-            # Get the single SHAP values array for the selected instance
-            shap_values_for_instance = shap_values_df.loc[
-                selected_bill_id
-            ].values  # Use .loc for safety, and .values to get numpy array
-            # Get the single feature values array for the selected instance (scaled)
-            feature_values_for_instance = X_scaled_for_shap.loc[
-                selected_bill_id
-            ]  # This is a pandas Series with feature names as index
+            # Retrieve the SHAP values and feature values for the selected instance
+            # CORRECTED LINE: Use array indexing for shap_values_df (since it's a NumPy array)
+            shap_values_for_instance = shap_values_df[shap_index_in_array]
 
+            # Keep .iloc for X_scaled_for_shap, assuming it's a Pandas DataFrame
+            feature_values_for_instance = X_scaled_for_shap.iloc[shap_index_in_array]
             # Get the list of feature names (assuming X_scaled_for_shap is a DataFrame)
+
+            # Get the list of feature names (this assumes X_scaled_for_shap is a DataFrame)
             feature_names_list = X_scaled_for_shap.columns.tolist()
 
             # Create the shap.Explanation object for this specific instance
@@ -805,6 +803,7 @@ if not filtered_overdue_predictions_df.empty:
                 feature_names=feature_names_list,
             )
             fig_shap, ax_shap = plt.subplots(figsize=(10, 7))
+
             # Plot the waterfall
             # We need to capture the matplotlib figure from SHAP's plot function
             # and then pass it to st.pyplot.
@@ -814,6 +813,7 @@ if not filtered_overdue_predictions_df.empty:
                 max_display=15,  # Re-introduce max_display
                 show=False,  # Re-introduce show=False for Streamlit
             )
+
             plt.tight_layout()  # Adjust layout to prevent labels from overlapping
             st.pyplot(fig_shap)  # Display the plot in Streamlit
             plt.close(fig_shap)  # Close the figure to free memory

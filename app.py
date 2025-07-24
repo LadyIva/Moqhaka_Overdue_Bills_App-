@@ -819,7 +819,7 @@ if not filtered_overdue_predictions_df.empty:
             plt.close(fig_shap)  # Close the figure to free memory
 
             st.write(
-                f"**Base Value (Expected Model Output):** {explainer.expected_value:.2f}"
+                f"**Base Value (Expected Model Output):** {explainer.expected_value.item():.2f}"
             )
             st.write(
                 f"**Prediction for this bill:** {selected_bill_row['predicted_probability_overdue']:.2f}"

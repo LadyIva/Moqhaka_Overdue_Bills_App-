@@ -385,23 +385,6 @@ def load_and_predict_data(_scaler_obj, _model_obj):
         )
         print(f"DEBUG: Parquet file loaded successfully. Shape: {df.shape}")
 
-        # --- ADD THESE DEBUGGING LINES *HERE* ---
-        st.write(
-            "--- Debugging Bill IDs (after initial load, before any sampling/filtering) ---"
-        )
-        st.write(f"Total rows in loaded DataFrame (df): {len(df)}")
-        st.write(f"Count of NaN Bill IDs: {df['bill_id'].isnull().sum()}")
-        st.write(f"Count of Empty String Bill IDs: {(df['bill_id'] == '').sum()}")
-        st.write(
-            f"Count of Bill IDs with only spaces: {(df['bill_id'].astype(str).str.strip() == '').sum()}"
-        )
-        # Optional: Display a few actual rows with empty/NaN bill_ids if you find any
-        # empty_id_rows = df[df['bill_id'].isnull() | (df['bill_id'] == '') | (df['bill_id'].astype(str).str.strip() == '')]
-        # if not empty_id_rows.empty:
-        #     st.write("Sample of rows with empty/NaN bill_id:", empty_id_rows.head())
-        st.write("--- End Debugging Bill IDs ---")
-        # --- END DEBUGGING LINES ---
-
         initial_rows = len(df)
         # Filter out rows where 'bill_id' is an empty string
         df = df[
@@ -598,34 +581,66 @@ else:
     col3.metric("F1-Score", "N/A")
     col4.metric("Accuracy", "N/A")
 
-# st.write(f"ROC AUC: {roc_auc:.4f}")  # --- FIX: Removed duplicated line ---
 st.markdown("---")
 
-# --- Confusion Matrix ---
-st.subheader("Confusion Matrix")
-if not (y_true_for_evaluation == 0).all() and not (y_true_for_evaluation == 1).all():
-    cm = confusion_matrix(y_true_for_evaluation, y_pred_threshold)
+# --- START OF CONTEXTUALIZED SUMMARY OF PREDICTION OUTCOMES ---
+st.subheader("What Our Model Predicts (Detailed Breakdown):")
+st.markdown(
+    "Here's a breakdown of how the model's predictions align with actual outcomes for overdue bills:"
+)
 
-    fig_cm, ax_cm = plt.subplots(figsize=(6, 5))
-    sns.heatmap(
-        cm,
-        annot=True,
-        fmt="d",
-        cmap="Blues",
-        cbar=False,
-        xticklabels=["Predicted Not Overdue (0)", "Predicted Overdue (1)"],
-        yticklabels=["Actual Not Overdue (0)", "Actual Overdue (1)"],
-        ax=ax_cm,
+try:
+    # Use the correctly defined variables: y_true_for_evaluation and y_pred_threshold
+    tn, fp, fn, tp = confusion_matrix(y_true_for_evaluation, y_pred_threshold).ravel()
+
+    # Display each outcome with a clear explanation and appropriate color
+    st.write(f"**✔ Bills Correctly Flagged as Overdue (True Positives):** {tp} bills")
+    if tp > 0:
+        st.success(
+            "These bills were accurately identified by the model as likely to become overdue. This is where your proactive interventions can be most effective in preventing revenue loss."
+        )
+    else:
+        st.info("No bills were correctly identified as overdue at this threshold.")
+
+    st.write(
+        f"**❗ Bills Wrongly Flagged as Overdue (False Positives - 'False Alarms'):** {fp} bills"
     )
-    ax_cm.set_title(f"Confusion Matrix (Threshold: {prediction_threshold:.2f})")
-    ax_cm.set_xlabel("Predicted Label")
-    ax_cm.set_ylabel("True Label")
-    st.pyplot(fig_cm)
-else:
-    st.info("Confusion Matrix not displayed as target column was missing or empty.")
+    if fp > 0:
+        st.warning(
+            "These are bills the model predicted would be overdue, but they actually were not. Focusing on these could lead to wasted effort or unnecessary contact with customers who pay on time."
+        )
+    else:
+        st.info("No false alarms at this threshold!")
+
+    st.write(
+        f"**❌ Bills Missed (False Negatives - 'Missed Opportunities'):** {fn} bills"
+    )
+    if fn > 0:
+        st.error(
+            "These bills were actually overdue, but the model failed to flag them. This represents a critical area for potential lost revenue if they're not manually caught or if the model's threshold/performance needs adjustment."
+        )
+    else:
+        st.success("No overdue bills were missed by the model at this threshold!")
+
+    st.write(
+        f"**✅ Bills Correctly Identified as Not Overdue (True Negatives):** {tn} bills"
+    )
+    if tn > 0:
+        st.info(
+            "These bills were correctly identified as unlikely to become overdue, allowing your team to efficiently allocate resources elsewhere."
+        )
+    else:
+        st.warning(
+            "No bills were correctly identified as not overdue at this threshold, which might indicate a very high number of overdue bills in your data or a threshold that's too low."
+        )
+
+except ValueError as e:
+    st.error(
+        f"Could not calculate the detailed breakdown. Please ensure `y_true_for_evaluation` and `y_pred_threshold` are correctly defined and contain binary values (0 or 1). Error: {e}"
+    )
 
 st.markdown("---")
-
+# --- END OF CONTEXTUALIZED SUMMARY OF PREDICTION OUTCOMES ---
 
 # --- Section 2: Actionable List of Bills Predicted as Overdue ---
 st.header("📝 Actionable List: Bills Predicted as Overdue")
@@ -706,7 +721,6 @@ if filter_estimated_reading:
         st.warning(
             "Column 'is_estimated_reading' not found for filtering. Filtering skipped."
         )
-
 
 # Now display filtered_overdue_predictions_df
 if not filtered_overdue_predictions_df.empty:

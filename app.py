@@ -400,7 +400,19 @@ def load_and_predict_data(_scaler_obj, _model_obj):
         # if not empty_id_rows.empty:
         #     st.write("Sample of rows with empty/NaN bill_id:", empty_id_rows.head())
         st.write("--- End Debugging Bill IDs ---")
-    # --- END DEBUGGING LINES ---
+        # --- END DEBUGGING LINES ---
+
+        initial_rows = len(df)
+        # Filter out rows where 'bill_id' is an empty string
+        df = df[
+            df["bill_id"] != ""
+        ].copy()  # Use .copy() to ensure it's a new DataFrame and avoid warnings
+        st.info(
+            f"Filtered out {initial_rows - len(df)} rows with empty 'bill_id'. Remaining rows for analysis: {len(df)}"
+        )
+        print(
+            f"DEBUG: Filtered out {initial_rows - len(df)} rows with empty 'bill_id'. Remaining rows: {len(df)}"
+        )
 
     except FileNotFoundError:
         st.error(

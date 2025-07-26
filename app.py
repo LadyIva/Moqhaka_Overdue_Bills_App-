@@ -460,22 +460,30 @@ def load_and_predict_data(_scaler_obj, _model_obj):
 
     # Scale numerical features using the loaded scaler
     # Create a copy to avoid SettingWithCopyWarning
-    X_data_scaled = X_data.copy()
+    X_data_scaled_array = (
+        X_data.copy()
+    )  # Renamed to clearly indicate it becomes an array after transform
     try:
         # Only transform the columns specified in SCALED_NUMERICAL_COLS
-        # Ensure these columns exist in X_data_scaled before transforming
+        # Ensure these columns exist in X_data_scaled_array before transforming
         cols_to_scale_exist = [
-            col for col in SCALED_NUMERICAL_COLS if col in X_data_scaled.columns
+            col for col in SCALED_NUMERICAL_COLS if col in X_data_scaled_array.columns
         ]
         if len(cols_to_scale_exist) != len(SCALED_NUMERICAL_COLS):
             missing_cols = set(SCALED_NUMERICAL_COLS) - set(cols_to_scale_exist)
             raise ValueError(f"Missing numerical columns for scaling: {missing_cols}")
 
-        X_data_scaled[cols_to_scale_exist] = _scaler_obj.transform(
-            X_data_scaled[cols_to_scale_exist]
+        X_data_scaled_array[cols_to_scale_exist] = _scaler_obj.transform(
+            X_data_scaled_array[cols_to_scale_exist]
         )
+        # --- CRITICAL FIX: Convert the scaled NumPy array back to a DataFrame named X_scaled_for_shap ---
+        # This retains column names and index, necessary for SHAP and for the variable to be defined.
+        X_scaled_for_shap = pd.DataFrame(
+            X_data_scaled_array, columns=FEATURE_COLUMNS, index=X_data.index
+        )
+
         print(
-            f"DEBUG: Numerical features scaled. X_data_scaled shape after scaling: {X_data_scaled.shape}"
+            f"DEBUG: Numerical features scaled. X_scaled_for_shap shape after scaling: {X_scaled_for_shap.shape}"
         )
     except Exception as e:
         st.error(
@@ -486,7 +494,8 @@ def load_and_predict_data(_scaler_obj, _model_obj):
 
     # --- 3. Get probabilities from the loaded model ---
     try:
-        probabilities = _model_obj.predict_proba(X_data_scaled)[:, 1]
+        # Use the correctly named DataFrame X_scaled_for_shap for prediction
+        probabilities = _model_obj.predict_proba(X_scaled_for_shap)[:, 1]
         print(
             f"DEBUG: Model prediction successful. Probabilities shape: {probabilities.shape}"
         )
@@ -506,7 +515,7 @@ def load_and_predict_data(_scaler_obj, _model_obj):
         f"DEBUG: Final DataFrame for prediction prepared. Final shape: {data_for_prediction_df.shape}"
     )
 
-    # --- NEW: Also return shap_values and X_data_scaled ---
+    # --- Return the necessary components ---
     return data_for_prediction_df, y_true, X_scaled_for_shap
 
 
@@ -515,21 +524,20 @@ print("--- Calling load_and_predict_data outside the function definition ---")
 result_of_load_data = load_and_predict_data(scaler, model)
 
 print(f"DEBUG: Type of result_of_load_data: {type(result_of_load_data)}")
-# --- FIX: Changed len(result_of_load_data) == 4 to == 3 ---
+
+# --- Corrected unpacking and error message ---
 if isinstance(result_of_load_data, tuple) and len(result_of_load_data) == 3:
-    data_for_prediction, y_true_for_evaluation, X_scaled_for_shap = (
-        result_of_load_data  # Unpack shap_values_df and X_scaled_for_shap
-    )
+    data_for_prediction, y_true_for_evaluation, X_scaled_for_shap = result_of_load_data
     print(
-        "DEBUG: Successfully unpacked data_for_prediction, y_true_for_evaluation, shap_values_df, and X_scaled_for_shap."
+        "DEBUG: Successfully unpacked data_for_prediction, y_true_for_evaluation, and X_scaled_for_shap."
     )
     # Proceed with the rest of your Streamlit app
 else:
     st.error(
-        "Application setup failed: Data loading and prediction function did not return expected values. Check logs for details."
+        "Application setup failed: Data loading and prediction function did not return the expected 3 values. Check logs for details."
     )
     print(
-        "ERROR: Application setup failed: load_and_predict_data did not return a 4-item tuple or returned None due to error."
+        "ERROR: Application setup failed: load_and_predict_data did not return a 3-item tuple or returned None due to error."
     )
     st.stop()
 

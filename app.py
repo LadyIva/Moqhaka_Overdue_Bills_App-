@@ -413,6 +413,11 @@ def load_and_predict_data(_scaler_obj, _model_obj):
             f"DEBUG: Filtered out {initial_rows - len(df)} rows with empty 'bill_id'. Remaining rows: {len(df)}"
         )
 
+        # Convert any infinity values to NaN to prevent FutureWarning from Seaborn/Pandas
+        for col in df.select_dtypes(include=np.number).columns:
+            if (df[col] == np.inf).any() or (df[col] == -np.inf).any():
+                df[col] = df[col].replace([np.inf, -np.inf], np.nan)
+
     except FileNotFoundError:
         st.error(
             f"Data file not found at {DATA_FULL_PATH}. Please ensure '{DATA_FULL_PATH}' is in your GitHub repository."

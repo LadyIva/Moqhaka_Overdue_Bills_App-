@@ -497,21 +497,6 @@ def load_and_predict_data(_scaler_obj, _model_obj):
         print(f"ERROR: Model prediction failed: {e}")
         st.stop()
 
-    # --- NEW: Calculate SHAP values ---
-    print("DEBUG: Calculating SHAP values...")
-    try:
-        # SHAP Explainer for tree models
-        explainer = shap.TreeExplainer(_model_obj)
-        # Calculate SHAP values for the scaled data
-        shap_values = explainer.shap_values(X_data_scaled)
-        print(f"DEBUG: SHAP values calculated. Shape: {shap_values.shape}")
-    except Exception as e:
-        st.warning(
-            f"Could not calculate SHAP values: {e}. Feature explanations will not be available."
-        )
-        print(f"WARNING: SHAP calculation failed: {e}")
-        shap_values = None  # Set to None if calculation fails
-
     # --- 4. Add predictions and actuals back to the DataFrame for display ---
     data_for_prediction_df["predicted_probability_overdue"] = probabilities
     data_for_prediction_df["actual_overdue_status"] = (
@@ -522,7 +507,7 @@ def load_and_predict_data(_scaler_obj, _model_obj):
     )
 
     # --- NEW: Also return shap_values and X_data_scaled ---
-    return data_for_prediction_df, y_true, shap_values, X_data_scaled
+    return data_for_prediction_df, y_true, X_scaled_for_shap
 
 
 # --- Main app execution flow (calling load_and_predict_data once) ---
@@ -530,9 +515,9 @@ print("--- Calling load_and_predict_data outside the function definition ---")
 result_of_load_data = load_and_predict_data(scaler, model)
 
 print(f"DEBUG: Type of result_of_load_data: {type(result_of_load_data)}")
-# --- FIX: Changed len(result_of_load_data) == 3 to == 4 ---
-if isinstance(result_of_load_data, tuple) and len(result_of_load_data) == 4:
-    data_for_prediction, y_true_for_evaluation, shap_values_df, X_scaled_for_shap = (
+# --- FIX: Changed len(result_of_load_data) == 4 to == 3 ---
+if isinstance(result_of_load_data, tuple) and len(result_of_load_data) == 3:
+    data_for_prediction, y_true_for_evaluation, X_scaled_for_shap = (
         result_of_load_data  # Unpack shap_values_df and X_scaled_for_shap
     )
     print(
@@ -553,7 +538,6 @@ else:
 y_pred_threshold = (
     data_for_prediction["predicted_probability_overdue"] >= prediction_threshold
 ).astype(int)
-
 
 # --- Section 1: Model Performance Summary ---
 st.header("📊 Model Performance Summary (at current threshold)")
@@ -697,7 +681,6 @@ if selected_customer_types:
             "Selected customer type filter columns not found in data. Filtering skipped."
         )
 
-
 # Apply property value category filter
 if selected_property_values:
     property_value_filters = [
@@ -716,7 +699,6 @@ if selected_property_values:
         st.warning(
             "Selected property value category filter columns not found in data. Filtering skipped."
         )
-
 
 # Apply ward filter
 if selected_wards:
@@ -768,29 +750,6 @@ if not filtered_overdue_predictions_df.empty:
         col for col in display_cols if col in filtered_overdue_predictions_df.columns
     ]
 
-    # --- NEW: Add Top Contributing Factors to the DataFrame ---
-    if shap_values_df is not None:
-        # Map the index of filtered_overdue_predictions_df to the original index of data_for_prediction to get correct SHAP rows
-        # This is crucial because filtered_overdue_predictions_df is a subset of data_for_prediction
-        # We need the original index to align with the SHAP values array
-        original_indices_in_full_df = filtered_overdue_predictions_df.index.tolist()
-
-        # This applies the helper function row-wise to generate the new column
-        filtered_overdue_predictions_df["Top_Risk_Factors"] = [
-            get_top_shap_contributors(
-                shap_values_df[data_for_prediction.index.get_loc(idx)], FEATURE_COLUMNS
-            )
-            for idx in original_indices_in_full_df
-        ]
-
-        # Add 'Top_Risk_Factors' to the columns to display
-        existing_display_cols.append("Top_Risk_Factors")
-    else:
-        st.warning(
-            "Feature explanations are not available due to SHAP calculation error."
-        )
-    # --- END NEW ADDITION ---
-
     st.dataframe(
         filtered_overdue_predictions_df[existing_display_cols], use_container_width=True
     )
@@ -822,7 +781,7 @@ st.write(
     "Select a Bill ID from the table above to understand the key factors influencing its overdue prediction."
 )
 
-# --- FIX: Use filtered_overdue_predictions_df for the selectbox ---
+# --- Use filtered_overdue_predictions_df for the selectbox ---
 if not filtered_overdue_predictions_df.empty:
     selected_bill_id = st.selectbox(
         "Select Bill ID:", filtered_overdue_predictions_df["bill_id"].unique()
@@ -830,62 +789,63 @@ if not filtered_overdue_predictions_df.empty:
 
     if selected_bill_id:
         # Get the row for the selected bill from the original, full data_for_prediction
-        # This is because selected_bill_row will be used to get original_index,
-        # which needs to align with data_for_prediction.
         selected_bill_row = data_for_prediction[
             data_for_prediction["bill_id"] == selected_bill_id
         ].iloc[0]
 
-        # Get the corresponding SHAP values and original features for this bill
-        # which aligns with the shap_values_df array.
+        # Get the corresponding original index to align with X_scaled_for_shap
         original_index = selected_bill_row.name
-        shap_index_in_array = data_for_prediction.index.get_loc(original_index)
 
-        if shap_values_df is not None:
-            # --- START: Simplified Waterfall Plot Adjustments ---
+        # --- START OF MODIFIED SHAP PLOT CODE (On-demand calculation for single bill) ---
+        try:
             st.markdown(
                 f"**Detailed Contribution Plot for Bill ID:** <span style='font-size: 16px;'>{selected_bill_id}</span>",
                 unsafe_allow_html=True,
             )
-            # You can adjust '16px' to whatever size looks best (e.g., 14px, 18px)
 
-            # Create a SHAP explainer (can be re-used from load_model_and_scaler if passed)
-            explainer = shap.TreeExplainer(model)
+            # Create a SHAP explainer (using the globally loaded 'model')
+            explainer = shap.TreeExplainer(
+                model
+            )  # 'model' should be available globally via @st.cache_resource
 
-            # Retrieve the SHAP values and feature values for the selected instance
-            # CORRECTED LINE: Use array indexing for shap_values_df (since it's a NumPy array)
-            shap_values_for_instance = shap_values_df[shap_index_in_array]
+            # Retrieve the *single instance* of scaled features for the selected bill
+            single_instance_X_scaled = X_scaled_for_shap.loc[[original_index]]
 
-            # Keep .iloc for X_scaled_for_shap, assuming it's a Pandas DataFrame
-            feature_values_for_instance = X_scaled_for_shap.iloc[shap_index_in_array]
-            # Get the list of feature names (assuming X_scaled_for_shap is a DataFrame)
+            # Calculate SHAP values for this single instance
+            # Use [0] for binary classification models with a single probability output
+            shap_values_for_instance = explainer.shap_values(single_instance_X_scaled)[
+                0
+            ]
 
-            # Get the list of feature names (this assumes X_scaled_for_shap is a DataFrame)
+            # Get the feature names from the global X_scaled_for_shap DataFrame
             feature_names_list = X_scaled_for_shap.columns.tolist()
+
+            # The actual feature values for this instance (for the 'data' parameter in Explanation)
+            feature_values_for_instance = single_instance_X_scaled.iloc[
+                0
+            ]  # Get the Series from the 1-row DataFrame
 
             # Create the shap.Explanation object for this specific instance
             explanation_for_waterfall = shap.Explanation(
                 values=shap_values_for_instance,
-                base_values=explainer.expected_value,  # This comes from your explainer
+                base_values=explainer.expected_value,
                 data=feature_values_for_instance.values,  # Pass the raw feature values as a numpy array
                 feature_names=feature_names_list,
             )
-            fig_shap, ax_shap = plt.subplots(
-                figsize=(7, 5)
-            )  # Keep figsize compact, or adjust as needed
+
+            fig_shap, ax_shap = plt.subplots(figsize=(7, 5))
 
             # Plot the waterfall
             shap.waterfall_plot(
                 explanation_for_waterfall,
-                max_display=7,  # <-- CRITICAL CHANGE: Reduce features displayed for simplicity
+                max_display=7,  # Or your preferred number like 5 or 10
                 show=False,
             )
 
-            plt.tight_layout()  # Adjust layout to prevent labels from overlapping
-            st.pyplot(fig_shap)  # Display the plot in Streamlit
-            plt.close(fig_shap)  # Close the figure to free memory
+            plt.tight_layout()
+            st.pyplot(fig_shap)
+            plt.close(fig_shap)
 
-            # Re-confirming the st.write for better understanding
             st.write(
                 f"**Base Value (Average Model Output):** {explainer.expected_value.item():.2f}"
             )
@@ -898,14 +858,26 @@ if not filtered_overdue_predictions_df.empty:
                 "features that increase the likelihood of being overdue, while blue bars "
                 "indicate features that decrease it. Only the most impactful features are shown."
             )
-            # --- END: Simplified Waterfall Plot Adjustments ---
-        else:
-            st.warning(
-                "SHAP values were not computed, so individual explanations are unavailable."
+
+        except Exception as e:
+            st.warning(f"Could not generate SHAP explanation for this bill: {e}")
+            print(
+                f"ERROR: SHAP explanation generation failed for {selected_bill_id}: {e}"
             )
+        # --- END OF MODIFIED SHAP PLOT CODE ---
+
+    # This 'else' block belongs to 'if selected_bill_id:'
+    # It executes if 'filtered_overdue_predictions_df' is not empty, but the user hasn't selected a bill ID yet
+    else:
+        st.info(
+            "Please select a Bill ID from the dropdown to view its detailed explanation."
+        )
+
+# This 'else' block belongs to 'if not filtered_overdue_predictions_df.empty:'
+# It executes if 'filtered_overdue_predictions_df' is empty (meaning no bills are flagged as overdue)
 else:
     st.info(
-        "Select a threshold that flags bills as overdue and apply filters to see individual explanations."
+        "No bills predicted as overdue at the current threshold and filters. Try adjusting the threshold or filters."
     )
 
 # --- Section 3: Model Insights - Feature Importance ---

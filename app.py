@@ -385,6 +385,13 @@ def load_and_predict_data(_scaler_obj, _model_obj):
         )
         print(f"DEBUG: Parquet file loaded successfully. Shape: {df.shape}")
 
+        df = df.head(
+            10000
+        ).copy()  # Use a smaller number (e.g., 10000, 5000) for testing
+        st.warning(
+            f"Using a downsampled dataset ({len(df)} rows) for performance testing."
+        )
+
         initial_rows = len(df)
         # Filter out rows where 'bill_id' is an empty string
         df = df[

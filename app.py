@@ -16,22 +16,6 @@ import seaborn as sns
 import os
 import shap
 
-# --- Custom CSS for button hover effect ---
-st.markdown(
-    """
-<style>
-/* Target Streamlit primary buttons specifically */
-/* The 'div.stButton > button' targets the actual button element within its Streamlit container */
-div.stButton > button[kind="primary"]:hover {
-    background-color: #4CAF50 !important; /* A nice shade of green for the background on hover */
-    color: white !important; /* Ensures the text remains white and readable */
-    border-color: #4CAF50 !important; /* Matches the border color to the background on hover */
-}
-</style>
-""",
-    unsafe_allow_html=True,
-)
-
 # --- Configuration and Model/Scaler Loading ---
 st.set_page_config(layout="wide", page_title="Moqhaka Overdue Bill Prediction")
 
